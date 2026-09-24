@@ -174,6 +174,105 @@ print(result["answers"]["outcome"])   # {"choice": "democrat_win"}
 
 ---
 
+## More use cases
+
+The pattern is always the same: anything that's a fast, repeatable judgment
+call becomes `state` (the facts) plus `questions` (the judgments). A few that
+fit well:
+
+| Use case | `state` | `questions` |
+|---|---|---|
+| Content moderation | post text | `choice`: allow / flag / remove · `score`: severity 0–100 |
+| Support ticket triage | ticket text | `choice`: route to billing / technical / sales · `score`: urgency · `noul`: confidence |
+| Resume screening | resume text | `choice`: advance / reject · `score`: role fit 0–100 |
+| Code review gate | diff summary | `choice`: approve / request changes · `score`: risk 0–100 |
+| Email prioritization | email body | `choice`: urgent / normal / low · `score`: importance |
+| Lead scoring | lead notes | `choice`: hot / warm / cold · `score`: conversion likelihood |
+| Review sentiment | review text | `choice`: positive / neutral / negative · `score`: intensity |
+| Fraud pre-screen | transaction description | `choice`: legit / review / block · `score`: risk 0–100 |
+
+Two worked examples (responses are illustrative):
+
+**Content moderation**
+
+```bash
+curl -X POST localhost:8000/decide \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "state": {"context": "Post: \"You are an idiot, nobody likes you.\" 3 user reports in the last hour."},
+    "questions": {
+      "moderation": {
+        "type": "choice",
+        "instructions": "What moderation action should be taken?",
+        "criteria": {
+          "allow": "No violation, leave the post up",
+          "flag": "Borderline, queue for human review",
+          "remove": "Clear violation, remove immediately"
+        }
+      },
+      "severity": {
+        "type": "score",
+        "instructions": "Severity of the violation, 0 to 100",
+        "criteria": ["none", "mild", "serious", "severe"]
+      }
+    }
+  }'
+```
+
+```json
+{
+  "answers": {
+    "moderation": {"choice": "remove"},
+    "severity": {"score_0_100": 72.5}
+  },
+  "latency_ms": 3950.2
+}
+```
+
+**Support ticket triage**
+
+```bash
+curl -X POST localhost:8000/decide \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "state": {"context": "Ticket: \"Charged twice for my September invoice, need this fixed before month-end close.\" Account: 10 seats, customer since 2021."},
+    "questions": {
+      "route": {
+        "type": "choice",
+        "instructions": "Which team should own this ticket?",
+        "criteria": {
+          "billing": "Payments, invoices, refunds",
+          "technical": "Bugs, integrations, outages",
+          "sales": "Upgrades, new purchases"
+        }
+      },
+      "urgency": {
+        "type": "score",
+        "instructions": "Urgency, 0 to 100",
+        "criteria": ["low", "normal", "high", "critical"]
+      },
+      "confidence": {"type": "noul", "instructions": "Confidence in the routing decision"}
+    }
+  }'
+```
+
+```json
+{
+  "answers": {
+    "route": {"choice": "billing"},
+    "urgency": {"score_0_100": 81.0},
+    "confidence": {"noul": 0.93}
+  },
+  "latency_ms": 4102.8
+}
+```
+
+Rule of thumb: if the same judgment gets made dozens of times a day with
+the same shape, hard-code it as a preset like `/decide/election` — one route,
+fixed questions, no per-call schema assembly.
+
+---
+
 ## Smoke test
 
 With the server running:
