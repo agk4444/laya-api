@@ -22,15 +22,6 @@ pip install -r requirements.txt
 That's it. The model weights download automatically from Hugging Face on
 first run (~808MB, cached afterwards).
 
-### Run on Google Colab (from your phone)
-
-Use the bundled `laya-api-colab.ipynb`: open it in Colab with a CPU
-runtime and run top to bottom. It installs dependencies, starts the server
-in the background, and runs the smoke test.
-
-Note: Colab's port isn't public — the API is for code running in the same
-notebook/runtime (`http://localhost:8000`).
-
 ---
 
 ## Start the server
