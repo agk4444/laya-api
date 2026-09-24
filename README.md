@@ -273,6 +273,101 @@ fixed questions, no per-call schema assembly.
 
 ---
 
+## Stock use cases
+
+Same pattern, applied to trading judgments:
+
+| Use case | `state` | `questions` |
+|---|---|---|
+| Options flow filter | flow facts (volume vs OI, moneyness, IV, expiry) | `choice`: actionable / noise · `choice`: bullish / bearish / neutral · `score`: conviction |
+| Earnings trade | estimates, whisper, guidance, implied move | `choice`: bullish / bearish / neutral · `score`: expected move % · `noul`: confidence |
+| Breakout or fakeout | price/volume facts vs resistance | `choice`: genuine breakout / fakeout · `score`: conviction |
+| MOC imbalance read | closing-auction imbalance figures | `choice`: buy pressure / sell pressure / neutral into next session · `score`: intensity |
+| Dip-buy decision | drawdown %, support levels, volume | `choice`: buy the dip / wait / avoid · `score`: bounce probability |
+| News reaction | headline + context | `choice`: bullish / bearish / neutral · `score`: conviction · `noul`: confidence |
+
+Two worked examples (responses are illustrative):
+
+**Earnings trade**
+
+```bash
+curl -X POST localhost:8000/decide \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "state": {"context": "NVDA reports after close. Consensus EPS $5.90, whisper $6.10. Data-center revenue guide is the swing factor. Options imply a 7.2% move. Stock +4% into the print on elevated volume."},
+    "questions": {
+      "direction": {
+        "type": "choice",
+        "instructions": "Direction of the post-earnings reaction",
+        "criteria": {
+          "bullish": "Stock rallies on the print",
+          "bearish": "Stock sells off on the print",
+          "neutral": "Muted reaction, stays within half the implied move"
+        }
+      },
+      "move": {
+        "type": "score",
+        "instructions": "Expected absolute move in percent, 0 to 100",
+        "criteria": ["small", "average", "large", "extreme"]
+      },
+      "confidence": {"type": "noul", "instructions": "Confidence in this call"}
+    }
+  }'
+```
+
+```json
+{
+  "answers": {
+    "direction": {"choice": "bullish"},
+    "move": {"score_0_100": 68.0},
+    "confidence": {"noul": 0.64}
+  },
+  "latency_ms": 4021.4
+}
+```
+
+**MOC imbalance read**
+
+```bash
+curl -X POST localhost:8000/decide \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "state": {"context": "Closing-auction imbalances: S&P 500 -$3.04B, Nasdaq 100 -$1.14B, Dow -$736M, Mag 7 -$655M. All net sell. VIX flat, no major news after the bell."},
+    "questions": {
+      "pressure": {
+        "type": "choice",
+        "instructions": "Net pressure heading into the next session",
+        "criteria": {
+          "buy_pressure": "Imbalances suggest dip-buying / squeeze potential",
+          "sell_pressure": "Imbalances confirm continued selling",
+          "neutral": "Imbalances are noise, no edge"
+        }
+      },
+      "intensity": {
+        "type": "score",
+        "instructions": "Intensity of the signal, 0 to 100",
+        "criteria": ["weak", "moderate", "strong", "extreme"]
+      }
+    }
+  }'
+```
+
+```json
+{
+  "answers": {
+    "pressure": {"choice": "sell_pressure"},
+    "intensity": {"score_0_100": 74.5}
+  },
+  "latency_ms": 3880.9
+}
+```
+
+Note: the options-flow filter already ships as a built-in preset —
+`POST /decide/options` — so a scheduled scanner can call it directly with
+no per-call schema assembly.
+
+---
+
 ## Smoke test
 
 With the server running:
