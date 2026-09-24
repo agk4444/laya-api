@@ -187,6 +187,10 @@ mobile-friendly single page, no build step, no extra dependencies:
 Answers render as cards (picked choice, score bars, confidence bars) with
 latency and raw JSON on tap.
 
+The **API** tab is a built-in Postman-style console: pick any endpoint, edit
+the JSON body, send, and inspect the status + response. Prefer the real
+Postman? Import `laya-api.postman_collection.json` from the repo.
+
 ---
 
 ## More use cases
