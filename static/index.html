@@ -69,6 +69,7 @@
     <div class="tab on" data-mode="decide">Decide</div>
     <div class="tab" data-mode="election">Election</div>
     <div class="tab" data-mode="options">Options</div>
+    <div class="tab" data-mode="api">API</div>
   </div>
 
   <!-- generic -->
@@ -94,6 +95,23 @@
     <button class="run" id="go-options">Filter the flow</button>
   </div>
 
+  <!-- raw api console (postman-style) -->
+  <div class="card" id="pane-api" style="display:none">
+    <label>Endpoint</label>
+    <select id="a-ep">
+      <option value="GET /health">GET /health</option>
+      <option value="POST /decide">POST /decide</option>
+      <option value="POST /decide/election">POST /decide/election</option>
+      <option value="POST /decide/options">POST /decide/options</option>
+    </select>
+    <div id="a-bodywrap">
+      <label>JSON body</label>
+      <textarea id="a-body" style="min-height:220px;font-family:monospace;font-size:13px"></textarea>
+    </div>
+    <button class="run" id="go-api">Send</button>
+    <div id="a-resp" style="margin-top:12px"></div>
+  </div>
+
   <div class="card" id="out" style="display:none"></div>
   <div class="health" id="health"><span class="dot"></span>checking server…</div>
 </div>
@@ -106,7 +124,7 @@ let mode = 'decide', qn = 0;
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
   t.classList.add('on'); mode = t.dataset.mode;
-  ['decide','election','options'].forEach(m => $('pane-'+m).style.display = m===mode ? '' : 'none');
+  ['decide','election','options','api'].forEach(m => $('pane-'+m).style.display = m===mode ? '' : 'none');
   $('out').style.display = 'none';
 }));
 
@@ -215,6 +233,73 @@ $('go-election').onclick = e =>
 
 $('go-options').onclick = e =>
   callApi('/decide/options', {state: $('o-state').value.trim()}, e.target);
+
+/* ---------- api console ---------- */
+const TEMPLATES = {
+  'GET /health': null,
+  'POST /decide': {
+    state: {context: 'NVDA down 8% to $192 on 2x average volume, sitting on the 50-day moving average.'},
+    questions: {
+      dip_buy: {
+        type: 'choice',
+        instructions: 'Is this a buy-the-dip setup?',
+        criteria: {
+          buy: 'Oversold bounce likely - buy',
+          wait: 'Wait for confirmation - do not buy yet',
+          avoid: 'Downtrend intact - avoid'
+        }
+      },
+      bounce_odds: {
+        type: 'score',
+        instructions: 'Odds of a 5%+ bounce within a week, 0 to 100',
+        criteria: ['0: no chance', '50: coin flip', '100: certain']
+      }
+    }
+  },
+  'POST /decide/election': {
+    context: 'Maine Senate: poll aggregate D+2, markets 54% Dem. Incumbent retiring.'
+  },
+  'POST /decide/options': {
+    state: 'NVDA 2026-10-16 $200 call. Underlying $192.40, 4% OTM. Volume 12,400 vs OI 1,800 (6.9x). IV 48%. 28 days to expiry.'
+  }
+};
+
+function refreshApiBody() {
+  const t = TEMPLATES[$('a-ep').value];
+  $('a-bodywrap').style.display = t ? '' : 'none';
+  if (t) $('a-body').value = JSON.stringify(t, null, 2);
+}
+$('a-ep').addEventListener('change', refreshApiBody);
+refreshApiBody();
+
+$('go-api').addEventListener('click', async e => {
+  const btn = e.target, box = $('a-resp');
+  const [method, path] = $('a-ep').value.split(' ');
+  btn.disabled = true;
+  box.innerHTML = '<div class="spin">Sending…</div>';
+  const t0 = performance.now();
+  try {
+    let body;
+    if (method !== 'GET') {
+      try { body = JSON.stringify(JSON.parse($('a-body').value)); }
+      catch { throw new Error('Body is not valid JSON'); }
+    }
+    const r = await fetch(path, {method,
+      headers: {'Content-Type': 'application/json'},
+      ...(body ? {body} : {})});
+    const ms = Math.round(performance.now() - t0);
+    const data = await r.json().catch(() => null);
+    const color = r.ok ? 'var(--green)' : 'var(--red)';
+    box.innerHTML =
+      '<div class="meta" style="margin:0 0 8px"><b style="color:' + color + '">' +
+      r.status + '</b> · ' + ms + ' ms</div>' +
+      '<details class="raw" open><summary>response</summary><pre>' +
+      escapeHtml(JSON.stringify(data, null, 2)) + '</pre></details>';
+  } catch (err) {
+    box.innerHTML = '<div class="err">Error: ' + escapeHtml(err.message) + '</div>';
+  }
+  btn.disabled = false;
+});
 
 /* ---------- health ---------- */
 fetch('/health').then(r => r.json()).then(h => {
