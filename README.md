@@ -36,14 +36,16 @@ notebook/runtime (`http://localhost:8000`).
 ## Start the server
 
 ```bash
-python server.py --model agk4444/laya-typed-decisions --port 8000
+python server.py --port 8000
 ```
+
+Defaults to the fine-tuned `agk4444/laya-typed-decisions` checkpoint.
 
 Options:
 
 | Flag / env | Default | What |
 |---|---|---|
-| `--model` / `LAYA_MODEL` | `convaiinnovations/laya` | HF repo or local checkpoint path |
+| `--model` / `LAYA_MODEL` | `agk4444/laya-typed-decisions` | HF repo or local checkpoint path |
 | `--subfolder` / `LAYA_SUBFOLDER` | — | subfolder inside the repo (e.g. `multilingual`) |
 | `--device` / `LAYA_DEVICE` | `cpu` | `cpu` or `cuda` |
 | `--host` | `0.0.0.0` | bind address |

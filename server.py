@@ -11,9 +11,9 @@ Endpoints:
     POST /decide/options    preset:  {"state": "..."}     -> action / direction / conviction / confidence
 
 Run:
-    python server.py --model convaiinnovations/laya     # HF id (downloaded on first run)
+    python server.py --model agk4444/laya-typed-decisions     # HF id (downloaded on first run)
     python server.py --model /path/to/checkpoint       # local weights dir
-    LAYA_MODEL=convaiinnovations/laya python server.py
+    LAYA_MODEL=agk4444/laya-typed-decisions python server.py
 
 Then, e.g.:
     curl -X POST localhost:8000/decide/election \
@@ -187,7 +187,7 @@ def decide_options(payload: dict):
 def main():
     global agent, model_ref
     ap = argparse.ArgumentParser(description="Serve Laya as an HTTP API on CPU")
-    ap.add_argument("--model", default=os.environ.get("LAYA_MODEL", "convaiinnovations/laya"),
+    ap.add_argument("--model", default=os.environ.get("LAYA_MODEL", "agk4444/laya-typed-decisions"),
                     help="HF id or local checkpoint dir")
     ap.add_argument("--subfolder", default=os.environ.get("LAYA_SUBFOLDER"),
                     help="checkpoint subfolder inside a bundled repo (e.g. multilingual)")
