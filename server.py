@@ -7,7 +7,7 @@ decisions over HTTP. No text generation - choice / score / noul heads only.
 Endpoints:
     GET  /health            liveness + which model is loaded
     POST /decide            generic: {"state": ..., "questions": {...}}
-    POST /decide/chunav     preset:  {"context": "..."}  -> outcome / dem_win_probability / confidence
+    POST /decide/election     preset:  {"context": "..."}  -> outcome / dem_win_probability / confidence
     POST /decide/options    preset:  {"state": "..."}     -> action / direction / conviction / confidence
 
 Run:
@@ -16,7 +16,7 @@ Run:
     LAYA_MODEL=convaiinnovations/laya python server.py
 
 Then, e.g.:
-    curl -X POST localhost:8000/decide/chunav \
+    curl -X POST localhost:8000/decide/election \
          -H 'Content-Type: application/json' \
          -d '{"context": "Maine Senate: polls D+2, markets 54% Dem..."}'
 """
@@ -31,7 +31,7 @@ from fastapi.responses import JSONResponse
 
 # ---------------------------------------------------------------- presets
 
-CHUNAV_QUESTIONS = {
+ELECTION_QUESTIONS = {
     "outcome": {
         "type": "choice",
         "instructions": "Which party wins this race?",
@@ -166,12 +166,12 @@ def decide_generic(payload: dict):
     return decide(state, questions)
 
 
-@app.post("/decide/chunav")
-def decide_chunav(payload: dict):
+@app.post("/decide/election")
+def decide_election(payload: dict):
     context = payload.get("context")
     if not context:
         raise HTTPException(status_code=400, detail="need {'context': '...'}")
-    return decide({"context": context}, CHUNAV_QUESTIONS)
+    return decide({"context": context}, ELECTION_QUESTIONS)
 
 
 @app.post("/decide/options")

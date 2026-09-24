@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test the running Laya API: one Chunav call + one options-filter call."""
+"""Smoke-test the running Laya API: one election-preset call + one options-filter call."""
 import json
 import sys
 import urllib.request
@@ -24,8 +24,8 @@ def get(path):
 
 print("health:", get("/health"))
 
-print("\n--- chunav ---")
-print(json.dumps(post("/decide/chunav", {
+print("\n--- election ---")
+print(json.dumps(post("/decide/election", {
     "context": "Maine Senate: poll aggregate D+2, Polymarket 54% Dem. Incumbent retiring."
 }), indent=1))
 
