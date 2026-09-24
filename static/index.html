@@ -101,8 +101,12 @@
     <select id="a-ep">
       <option value="GET /health">GET /health</option>
       <option value="POST /decide">POST /decide</option>
+      <option value="POST /decide/batch">POST /decide/batch</option>
+      <option value="POST /v1/systemone">POST /v1/systemone</option>
       <option value="POST /decide/election">POST /decide/election</option>
       <option value="POST /decide/options">POST /decide/options</option>
+      <option value="POST /decide/triage">POST /decide/triage</option>
+      <option value="POST /decide/moderation">POST /decide/moderation</option>
     </select>
     <div id="a-bodywrap">
       <label>JSON body</label>
@@ -261,6 +265,50 @@ const TEMPLATES = {
   },
   'POST /decide/options': {
     state: 'NVDA 2026-10-16 $200 call. Underlying $192.40, 4% OTM. Volume 12,400 vs OI 1,800 (6.9x). IV 48%. 28 days to expiry.'
+  },
+  'POST /decide/batch': {
+    states: [
+      'NVDA up 3% on strong data-center demand, breaking above the 50-day moving average.',
+      'NVDA down 8% to $192 on 2x average volume, sitting on the 50-day moving average.'
+    ],
+    questions: {
+      dip_buy: {
+        type: 'choice',
+        instructions: 'Is this a buy-the-dip setup?',
+        criteria: {
+          buy: 'Oversold bounce likely - buy',
+          wait: 'Wait for confirmation - do not buy yet',
+          avoid: 'Downtrend intact - avoid'
+        }
+      }
+    }
+  },
+  'POST /v1/systemone': {
+    state: 'Maine Senate: poll aggregate D+2, markets 54% Dem. Incumbent retiring.',
+    model: 'jev-latest',
+    questions: {
+      outcome: {
+        type: 'choice',
+        instructions: 'Which party wins this race?',
+        criteria: {
+          democrat_win: 'The Democratic candidate / party wins',
+          republican_win: 'The Republican candidate / party wins',
+          toss_up: 'Too close to call - neither side has a clear edge'
+        }
+      },
+      dem_win_probability: {
+        type: 'score',
+        instructions: 'Probability the Democrat wins, 0 to 100',
+        criteria: ['0: certain Republican win', '50: pure toss-up', '100: certain Democratic win']
+      },
+      confidence: {type: 'noul', instructions: 'How confident is this call'}
+    }
+  },
+  'POST /decide/triage': {
+    state: 'I was charged twice this month. Refund me now or I am cancelling my account.'
+  },
+  'POST /decide/moderation': {
+    state: 'You are an idiot and I will find you.'
   }
 };
 

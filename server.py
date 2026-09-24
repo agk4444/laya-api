@@ -7,8 +7,16 @@ decisions over HTTP. No text generation - choice / score / noul heads only.
 Endpoints:
     GET  /health            liveness + which model is loaded
     POST /decide            generic: {"state": ..., "questions": {...}}
-    POST /decide/election     preset:  {"context": "..."}  -> outcome / dem_win_probability / confidence
+    POST /decide/batch      many states, one call: {"states": [...], "questions": {...}}
+    POST /decide/election   preset:  {"context": "..."}  -> outcome / dem_win_probability / confidence
     POST /decide/options    preset:  {"state": "..."}     -> action / direction / conviction / confidence
+    POST /decide/triage     preset:  {"state": "..."}     -> intent / urgency / frustration / churn_risk
+    POST /decide/moderation preset:  {"state": "..."}     -> verdict / severity / needs_review
+    POST /v1/systemone      Jev-compatible: {"state": ..., "model": ..., "questions": {...}}
+                            -> {model, answers, usage} in TypeSafe System One wire format
+
+Auth: if LAYA_API_KEY is set, every POST route requires
+    Authorization: Bearer <key>  (GET / and /health stay open).
 
 Run:
     python server.py --model agk4444/laya-typed-decisions     # HF id (downloaded on first run)
@@ -26,7 +34,7 @@ import os
 import threading
 import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from pathlib import Path
@@ -89,9 +97,71 @@ OPTIONS_QUESTIONS = {
     },
 }
 
+TRIAGE_QUESTIONS = {
+    "intent": {
+        "type": "choice",
+        "instructions": "What is the customer asking about?",
+        "criteria": {
+            "billing": "invoices, charges, payments, refunds",
+            "technical": "bugs, outages, errors, something not working",
+            "sales": "pricing, plans, new contracts, upgrades",
+            "other": "everything else",
+        },
+    },
+    "urgency": {
+        "type": "score",
+        "instructions": "How urgent is this request?",
+        "criteria": ["not urgent", "soon", "critical deadline or blocking issue"],
+    },
+    "frustration": {
+        "type": "score",
+        "instructions": "How frustrated does the customer sound?",
+        "criteria": ["calm", "annoyed", "furious"],
+    },
+    "churn_risk": {
+        "type": "noul",
+        "instructions": "Does the customer threaten to cancel or leave?",
+    },
+}
+
+MODERATION_QUESTIONS = {
+    "verdict": {
+        "type": "choice",
+        "instructions": "How should this content be classified?",
+        "criteria": {
+            "safe": "benign content, no policy issue",
+            "toxic": "insults, hate, or demeaning language",
+            "harassment": "targeted abuse toward a person or group",
+            "threat": "threats of violence or harm",
+        },
+    },
+    "severity": {
+        "type": "score",
+        "instructions": "How severe is the policy violation?",
+        "criteria": ["benign", "mild", "severe"],
+    },
+    "needs_review": {
+        "type": "noul",
+        "instructions": "Should a human moderator review this content?",
+    },
+}
+
 # ---------------------------------------------------------------- app state
 
-app = FastAPI(title="Laya CPU API", version="1.0.0")
+app = FastAPI(title="Laya CPU API", version="1.1.0")
+
+API_KEY = os.environ.get("LAYA_API_KEY")
+MAX_BATCH_STATES = 100
+
+
+async def require_auth(request: Request):
+    """Bearer <redacted> gate for every POST route. No-op unless LAYA_API_KEY is set."""
+    if API_KEY and request.headers.get("authorization") != f"Bearer {API_KEY}":
+        raise HTTPException(status_code=401, detail="unauthorized: bad or missing bearer token")
+
+
+AUTH = [Depends(require_auth)]
+
 agent = None
 agent_lock = threading.Lock()
 model_ref = None
@@ -147,36 +217,114 @@ def normalize_answer(ans, question):
     return {"raw": ans}
 
 
-def decide(state, questions):
-    """Run one typed decision through Laya, serialized behind a lock."""
+def _run_predict(state, questions):
+    """Run agent.predict serialized behind a lock. Returns (raw_result, latency_ms)."""
     t0 = time.time()
     with agent_lock:
         try:
             res = agent.predict(state, questions)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=f"laya predict failed: {exc}") from exc
-    ms = round((time.time() - t0) * 1000, 1)
+    return res, round((time.time() - t0) * 1000, 1)
+
+
+def decide(state, questions):
+    """Run one typed decision through Laya, normalized to the /decide shape."""
+    res, ms = _run_predict(state, questions)
     answers = {qid: normalize_answer(get_answer(res, qid), q) for qid, q in questions.items()}
     return {"answers": answers, "latency_ms": ms}
+
+
+def jev_answers(res, questions):
+    """Raw laya answers in TypeSafe System One wire shape.
+
+    The SDK already emits {type, choice|score|noul, probabilities, legend,
+    confidence} per question - identical to what Jev returns. The internal
+    `action` (RL act_probability) is stripped; Jev has no such field.
+    """
+    out = {}
+    for qid in questions:
+        ans = get_answer(res, qid)
+        if isinstance(ans, dict):
+            ans = {k: v for k, v in ans.items() if k != "action"}
+        out[qid] = ans
+    return out
+
+
+def check_questions(questions):
+    if not isinstance(questions, dict) or not questions:
+        raise HTTPException(status_code=400, detail="need a non-empty 'questions' object")
 
 
 # ---------------------------------------------------------------- routes
 
 @app.get("/health")
 def health():
-    return {"ok": agent is not None, "model": model_ref, "device": "cpu"}
+    return {"ok": agent is not None, "model": model_ref, "device": "cpu",
+            "auth": bool(API_KEY)}
 
 
-@app.post("/decide")
+@app.post("/decide", dependencies=AUTH)
 def decide_generic(payload: dict):
     state = payload.get("state")
     questions = payload.get("questions")
-    if state is None or not isinstance(questions, dict) or not questions:
+    if state is None:
         raise HTTPException(status_code=400, detail="need {'state': ..., 'questions': {...}}")
+    check_questions(questions)
     return decide(state, questions)
 
 
-@app.post("/decide/election")
+@app.post("/decide/batch", dependencies=AUTH)
+def decide_batch(payload: dict):
+    states = payload.get("states")
+    questions = payload.get("questions")
+    if not isinstance(states, list) or not states:
+        raise HTTPException(status_code=400, detail="need {'states': [...], 'questions': {...}}")
+    check_questions(questions)
+    if len(states) > MAX_BATCH_STATES:
+        raise HTTPException(status_code=400,
+                            detail=f"at most {MAX_BATCH_STATES} states per batch call")
+    batch_size = payload.get("batch_size")
+    t0 = time.time()
+    with agent_lock:
+        try:
+            if hasattr(agent, "predict_batch"):
+                results = agent.predict_batch(states, questions,
+                                              batch_size=batch_size if isinstance(batch_size, int) else None)
+            else:  # older laya wheels: serial fallback, same shapes
+                results = [agent.predict(s, questions) for s in states]
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=f"laya batch predict failed: {exc}") from exc
+    ms = round((time.time() - t0) * 1000, 1)
+    out = [{"answers": {qid: normalize_answer(get_answer(r, qid), q)
+                        for qid, q in questions.items()}} for r in results]
+    return {"results": out, "count": len(out), "latency_ms": ms}
+
+
+@app.post("/v1/systemone", dependencies=AUTH)
+def systemone(payload: dict):
+    """TypeSafe Jev wire protocol: {state, model?, questions} -> {model, answers, usage}.
+
+    A client written against https://api.typesafe.ai/v1/systemone only needs its
+    base URL repointed here. The `model` field is accepted and echoed back as the
+    loaded checkpoint (this server hosts one checkpoint; no switching).
+    """
+    state = payload.get("state")
+    questions = payload.get("questions")
+    if state is None:
+        raise HTTPException(status_code=400, detail="need {'state': ..., 'questions': {...}}")
+    check_questions(questions)
+    res, ms = _run_predict(state, questions)
+    usage = res.get("usage") if isinstance(res, dict) else None
+    return {
+        "model": model_ref,
+        "answers": jev_answers(res, questions),
+        "usage": usage if isinstance(usage, dict) else {"input_tokens": 0, "output_tokens": 0},
+        "latency_ms": ms,
+    }
+
+
+@app.post("/decide/election", dependencies=AUTH)
 def decide_election(payload: dict):
     context = payload.get("context")
     if not context:
@@ -184,12 +332,28 @@ def decide_election(payload: dict):
     return decide({"context": context}, ELECTION_QUESTIONS)
 
 
-@app.post("/decide/options")
+@app.post("/decide/options", dependencies=AUTH)
 def decide_options(payload: dict):
     state = payload.get("state")
     if not state:
         raise HTTPException(status_code=400, detail="need {'state': '...'}")
     return decide({"context": state} if isinstance(state, str) else state, OPTIONS_QUESTIONS)
+
+
+@app.post("/decide/triage", dependencies=AUTH)
+def decide_triage(payload: dict):
+    state = payload.get("state")
+    if not state:
+        raise HTTPException(status_code=400, detail="need {'state': '...'}")
+    return decide({"context": state} if isinstance(state, str) else state, TRIAGE_QUESTIONS)
+
+
+@app.post("/decide/moderation", dependencies=AUTH)
+def decide_moderation(payload: dict):
+    state = payload.get("state")
+    if not state:
+        raise HTTPException(status_code=400, detail="need {'state': '...'}")
+    return decide({"context": state} if isinstance(state, str) else state, MODERATION_QUESTIONS)
 
 
 # ---------------------------------------------------------------- main

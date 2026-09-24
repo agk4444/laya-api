@@ -150,6 +150,92 @@ curl -X POST localhost:8000/decide/options \
 To add your own preset, copy the `ELECTION_QUESTIONS` / `OPTIONS_QUESTIONS`
 pattern in `server.py` — it's a plain dict of typed questions plus a route.
 
+### 5. Batch — `POST /decide/batch`
+
+Many states, one call (up to 100 per call). Same questions scored against every
+state; results come back in input order:
+
+```bash
+curl -X POST localhost:8000/decide/batch \
+  -H 'Content-Type: application/json' \
+  -d '{"states": ["NVDA up 3% on strong data-center demand.",
+                  "NVDA down 8% on 2x average volume."],
+       "questions": {"bullish": {"type": "noul", "instructions": "Is the tone bullish?"}}}'
+```
+
+```json
+{
+  "results": [
+    {"answers": {"bullish": {"noul": 0.91}}},
+    {"answers": {"bullish": {"noul": 0.12}}}
+  ],
+  "count": 2,
+  "latency_ms": 6230.4
+}
+```
+
+On GPU the states share forward passes (upstream `predict_batch`); on CPU the win
+is one HTTP round trip instead of N.
+
+### 6. Jev-compatible — `POST /v1/systemone`
+
+Speaks TypeSafe's System One wire protocol, the same one the upstream
+`laya.serve` exposes. A client written against
+`https://api.typesafe.ai/v1/systemone` only needs its base URL repointed here —
+answers come back in Jev's shape (`type` / `choice` / `score` / `legend` /
+`probabilities` / `confidence` / `noul`) with a `{input_tokens, output_tokens}`
+usage block:
+
+```bash
+curl -X POST localhost:8000/v1/systemone \
+  -H 'Content-Type: application/json' \
+  -d '{"state": "Maine Senate: poll aggregate D+2, markets 54% Dem.",
+       "model": "jev-latest",
+       "questions": {"outcome": {"type": "choice", "instructions": "Which party wins?",
+                                "criteria": {"democrat_win": "Dem wins",
+                                             "republican_win": "Rep wins",
+                                             "toss_up": "Too close to call"}}}}'
+```
+
+```json
+{
+  "model": "agk4444/laya-typed-decisions",
+  "answers": {
+    "outcome": {"type": "choice", "choice": "democrat_win",
+                "probabilities": {"democrat_win": 0.7, "republican_win": 0.2, "toss_up": 0.1},
+                "confidence": 0.7}
+  },
+  "usage": {"input_tokens": 42, "output_tokens": 0},
+  "latency_ms": 3890.1
+}
+```
+
+The `model` field is accepted and echoed back as the loaded checkpoint — this
+server hosts one checkpoint, so there is no switching.
+
+### 7. Presets — `POST /decide/triage`, `POST /decide/moderation`
+
+```bash
+curl -X POST localhost:8000/decide/triage -H 'Content-Type: application/json' \
+  -d '{"state": "I was charged twice this month. Refund me now or I am cancelling."}'
+# -> intent / urgency / frustration / churn_risk
+
+curl -X POST localhost:8000/decide/moderation -H 'Content-Type: application/json' \
+  -d '{"state": "You are an idiot and I will find you."}'
+# -> verdict / severity / needs_review
+```
+
+### 8. API key auth
+
+Set `LAYA_API_KEY` and every POST route requires
+`Authorization: Bearer <key>` (401 otherwise). `GET /` and `GET /health` stay
+open so health checks keep working:
+
+```bash
+LAYA_API_KEY=secret123 python server.py
+curl -X POST localhost:8000/decide -H 'Authorization: Bearer secret123' ...
+```
+
 ### Python client
 
 ```python

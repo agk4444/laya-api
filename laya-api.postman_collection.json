@@ -1,1 +1,177 @@
-{"info":{"description":"Typed decisions (choice / score / noul) from the Laya model. Set baseUrl to wherever the server runs.","name":"Laya CPU API","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},"item":[{"name":"Health","request":{"method":"GET","url":"{{baseUrl}}/health"}},{"name":"Decide (generic)","request":{"body":{"mode":"raw","raw":"{\n  \"state\": {\"context\": \"NVDA down 8% to $192 on 2x average volume, sitting on the 50-day moving average.\"},\n  \"questions\": {\n    \"dip_buy\": {\n      \"type\": \"choice\",\n      \"instructions\": \"Is this a buy-the-dip setup?\",\n      \"criteria\": {\n        \"buy\": \"Oversold bounce likely - buy\",\n        \"wait\": \"Wait for confirmation - do not buy yet\",\n        \"avoid\": \"Downtrend intact - avoid\"\n      }\n    },\n    \"bounce_odds\": {\n      \"type\": \"score\",\n      \"instructions\": \"Odds of a 5%+ bounce within a week, 0 to 100\",\n      \"criteria\": [\"0: no chance\", \"50: coin flip\", \"100: certain\"]\n    },\n    \"confidence\": {\n      \"type\": \"noul\",\n      \"instructions\": \"How confident is this read, given the data quality\"\n    }\n  }\n}"},"header":[{"key":"Content-Type","value":"application/json"}],"method":"POST","url":"{{baseUrl}}/decide"}},{"name":"Decide (election preset)","request":{"body":{"mode":"raw","raw":"{\n  \"context\": \"Maine Senate: poll aggregate D+2, markets 54% Dem. Incumbent retiring.\"\n}"},"header":[{"key":"Content-Type","value":"application/json"}],"method":"POST","url":"{{baseUrl}}/decide/election"}},{"name":"Decide (options preset)","request":{"body":{"mode":"raw","raw":"{\n  \"state\": \"NVDA 2026-10-16 $200 call. Underlying $192.40, 4% OTM. Volume 12,400 vs OI 1,800 (6.9x). IV 48%. 28 days to expiry.\"\n}"},"header":[{"key":"Content-Type","value":"application/json"}],"method":"POST","url":"{{baseUrl}}/decide/options"}}],"variable":[{"key":"baseUrl","value":"http://localhost:8000"}]}
+{
+  "info": {
+    "description": "Typed decisions (choice / score / noul) from the Laya model. Set baseUrl to wherever the server runs.",
+    "name": "Laya CPU API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Decide (generic)",
+      "request": {
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"state\": {\"context\": \"NVDA down 8% to $192 on 2x average volume, sitting on the 50-day moving average.\"},\n  \"questions\": {\n    \"dip_buy\": {\n      \"type\": \"choice\",\n      \"instructions\": \"Is this a buy-the-dip setup?\",\n      \"criteria\": {\n        \"buy\": \"Oversold bounce likely - buy\",\n        \"wait\": \"Wait for confirmation - do not buy yet\",\n        \"avoid\": \"Downtrend intact - avoid\"\n      }\n    },\n    \"bounce_odds\": {\n      \"type\": \"score\",\n      \"instructions\": \"Odds of a 5%+ bounce within a week, 0 to 100\",\n      \"criteria\": [\"0: no chance\", \"50: coin flip\", \"100: certain\"]\n    },\n    \"confidence\": {\n      \"type\": \"noul\",\n      \"instructions\": \"How confident is this read, given the data quality\"\n    }\n  }\n}"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "url": "{{baseUrl}}/decide"
+      }
+    },
+    {
+      "name": "Decide (batch)",
+      "request": {
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"states\": [\n    \"NVDA up 3% on strong data-center demand, breaking above the 50-day moving average.\",\n    \"NVDA down 8% to $192 on 2x average volume, sitting on the 50-day moving average.\"\n  ],\n  \"questions\": {\n    \"dip_buy\": {\n      \"type\": \"choice\",\n      \"instructions\": \"Is this a buy-the-dip setup?\",\n      \"criteria\": {\n        \"buy\": \"Oversold bounce likely - buy\",\n        \"wait\": \"Wait for confirmation - do not buy yet\",\n        \"avoid\": \"Downtrend intact - avoid\"\n      }\n    }\n  }\n}"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "url": {
+          "raw": "{{base_url}}/decide/batch",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "decide",
+            "batch"
+          ]
+        }
+      }
+    },
+    {
+      "name": "System One (Jev-compatible)",
+      "request": {
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"state\": \"Maine Senate: poll aggregate D+2, markets 54% Dem. Incumbent retiring.\",\n  \"model\": \"jev-latest\",\n  \"questions\": {\n    \"outcome\": {\n      \"type\": \"choice\",\n      \"instructions\": \"Which party wins this race?\",\n      \"criteria\": {\n        \"democrat_win\": \"The Democratic candidate / party wins\",\n        \"republican_win\": \"The Republican candidate / party wins\",\n        \"toss_up\": \"Too close to call - neither side has a clear edge\"\n      }\n    },\n    \"dem_win_probability\": {\n      \"type\": \"score\",\n      \"instructions\": \"Probability the Democrat wins, 0 to 100\",\n      \"criteria\": [\n        \"0: certain Republican win\",\n        \"50: pure toss-up\",\n        \"100: certain Democratic win\"\n      ]\n    },\n    \"confidence\": {\n      \"type\": \"noul\",\n      \"instructions\": \"How confident is this call\"\n    }\n  }\n}"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "url": {
+          "raw": "{{base_url}}/v1/systemone",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "v1",
+            "systemone"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Decide (triage preset)",
+      "request": {
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"state\": \"I was charged twice this month. Refund me now or I am cancelling my account.\"\n}"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "url": {
+          "raw": "{{base_url}}/decide/triage",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "decide",
+            "triage"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Decide (moderation preset)",
+      "request": {
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"state\": \"You are an idiot and I will find you.\"\n}"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "url": {
+          "raw": "{{base_url}}/decide/moderation",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "decide",
+            "moderation"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Decide (election preset)",
+      "request": {
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"context\": \"Maine Senate: poll aggregate D+2, markets 54% Dem. Incumbent retiring.\"\n}"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "url": "{{baseUrl}}/decide/election"
+      }
+    },
+    {
+      "name": "Decide (options preset)",
+      "request": {
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"state\": \"NVDA 2026-10-16 $200 call. Underlying $192.40, 4% OTM. Volume 12,400 vs OI 1,800 (6.9x). IV 48%. 28 days to expiry.\"\n}"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "method": "POST",
+        "url": "{{baseUrl}}/decide/options"
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8000"
+    }
+  ]
+}
