@@ -46,10 +46,13 @@ Options: `--device cuda` if a GPU is available, `--host`, `--port`,
   Question types: `choice` (criteria = option dict), `score`
   (criteria = level list, normalized to `score_0_100`), `noul`
   (returns `noul` 0–1).
-- `POST /decide/chunav` — preset Chunav schema: `{"context": "..."}`
-  → `outcome` (choice), `dem_win_probability` (score 0–100), `confidence` (noul)
-- `POST /decide/options` — preset options-filter schema: `{"state": "..."}`
-  → `action`, `direction`, `conviction` (0–100), `confidence`
+- `POST /decide/chunav` — example preset (election-outcome schema):
+  `{"context": "..."}` → `outcome` (choice), `dem_win_probability`
+  (score 0–100), `confidence` (noul). Included as a worked example of a
+  fixed question set — copy the pattern in `server.py` for your own presets.
+- `POST /decide/options` — example preset (trade-filter schema):
+  `{"state": "..."}` → `action`, `direction`, `conviction` (0–100),
+  `confidence`.
 
 All POST responses include `latency_ms`.
 
@@ -62,14 +65,15 @@ python smoke.py                 # localhost:8000
 python smoke.py http://host:8000
 ```
 
-Runs one Chunav call and one options-filter call and prints the JSON.
+Runs one call against each example preset and prints the JSON.
 
 ## Honest caveats
 
-- This serves the **base checkpoint**, which ships uncalibrated: the choice
-  head and score head can disagree with each other, and the base model has a
-  systematic lean (see the 2026-09-21 bake-off: 16/23 Chunav choice agreement
-  with Jev, all 7 misses leaning Dem; 0/2 on the options filter). Calibrate
-  (temperature fitting) per domain before trusting probabilities.
-- CPU latency is seconds per call: fine for batch jobs (e.g. the 2-hourly
-  Chunav run), not for realtime.
+- This serves a checkpoint that ships **uncalibrated**: the choice
+  head and score head can disagree with each other, and the model can show
+  a systematic lean. In one 23-race election benchmark: 16/23 choice
+  agreement with an independent judge model, all 7 misses leaning the same
+  direction; 0/2 on a trade-filter task. Calibrate (temperature fitting)
+  per domain before trusting probabilities.
+- CPU latency is seconds per call: fine for batch jobs (e.g. a scheduled
+  run every couple of hours), not for realtime.
