@@ -27,7 +27,11 @@ import threading
 import time
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+
+from pathlib import Path
+
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 # ---------------------------------------------------------------- presets
 
@@ -91,6 +95,12 @@ app = FastAPI(title="Laya CPU API", version="1.0.0")
 agent = None
 agent_lock = threading.Lock()
 model_ref = None
+
+
+@app.get("/", response_class=HTMLResponse)
+def ui():
+    """Single-page GUI for the API."""
+    return (STATIC_DIR / "index.html").read_text()
 
 
 def get_answer(res, key):

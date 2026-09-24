@@ -174,6 +174,21 @@ print(result["answers"]["outcome"])   # {"choice": "democrat_win"}
 
 ---
 
+## Browser GUI
+
+Prefer clicking to curl? Open `http://localhost:8000` in a browser —
+mobile-friendly single page, no build step, no extra dependencies:
+
+- **Decide** tab: type a context, add typed questions (choice / score / noul)
+  with a point-and-click builder, hit Decide
+- **Election** tab: the election-outcome preset as a form
+- **Options** tab: the options-flow filter as a form
+
+Answers render as cards (picked choice, score bars, confidence bars) with
+latency and raw JSON on tap.
+
+---
+
 ## More use cases
 
 The pattern is always the same: anything that's a fast, repeatable judgment

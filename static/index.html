@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Laya Decisions</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --line:#2a2e38; --txt:#e8eaf0; --mut:#9aa0ae;
+          --acc:#f5b942; --green:#3ecf8e; --red:#f26d6d; --blue:#5aa9ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font-family:-apple-system,system-ui,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:640px; margin:0 auto; padding:16px 14px 48px; }
+  h1 { font-size:20px; margin:4px 0 2px; }
+  .sub { color:var(--mut); font-size:13px; margin-bottom:14px; }
+  .tabs { display:flex; gap:8px; margin-bottom:14px; }
+  .tab { flex:1; padding:11px 0; text-align:center; border-radius:12px;
+         background:var(--card); border:1px solid var(--line); color:var(--mut);
+         font-size:15px; font-weight:600; cursor:pointer; }
+  .tab.on { color:#111; background:var(--acc); border-color:var(--acc); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:12px; color:var(--mut); margin:10px 0 5px;
+          text-transform:uppercase; letter-spacing:.4px; }
+  label:first-child { margin-top:0; }
+  textarea, input[type=text], select {
+    width:100%; background:#10131a; border:1px solid var(--line); color:var(--txt);
+    border-radius:10px; padding:11px; font-size:15px; font-family:inherit; }
+  textarea { min-height:96px; resize:vertical; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  button.run { width:100%; padding:14px; margin-top:12px; border:0; border-radius:12px;
+    background:var(--acc); color:#111; font-size:16px; font-weight:700; cursor:pointer; }
+  button.run:disabled { opacity:.5; }
+  button.ghost { background:none; border:1px dashed var(--line); color:var(--mut);
+    border-radius:10px; padding:10px; width:100%; font-size:14px; cursor:pointer; margin-top:8px; }
+  .q { border:1px solid var(--line); border-radius:10px; padding:10px; margin-top:10px; position:relative; }
+  .q .del { position:absolute; top:6px; right:8px; background:none; border:0;
+            color:var(--mut); font-size:18px; cursor:pointer; }
+  .hint { font-size:12px; color:var(--mut); margin-top:4px; }
+  #out .ans { margin-bottom:10px; }
+  #out .ans:last-child { margin-bottom:0; }
+  .ans .k { font-size:12px; color:var(--mut); text-transform:uppercase; letter-spacing:.4px; }
+  .ans .v { font-size:19px; font-weight:700; margin:3px 0 6px; }
+  .bar { height:8px; background:#10131a; border-radius:6px; overflow:hidden; }
+  .bar > div { height:100%; background:var(--blue); border-radius:6px; }
+  .opts { font-size:13px; color:var(--mut); margin-top:6px; }
+  .opts b { color:var(--txt); }
+  .meta { font-size:12px; color:var(--mut); margin-top:10px; }
+  .err { background:#3a1d1d; border:1px solid #6b2b2b; color:#ffb4b4;
+         border-radius:10px; padding:12px; font-size:14px; }
+  details.raw { margin-top:10px; }
+  details.raw summary { color:var(--mut); font-size:13px; cursor:pointer; }
+  details.raw pre { background:#10131a; border-radius:10px; padding:10px;
+    font-size:12px; overflow-x:auto; white-space:pre-wrap; }
+  .spin { text-align:center; color:var(--mut); padding:18px; }
+  .health { font-size:12px; color:var(--mut); text-align:center; margin-top:14px; }
+  .health .dot { display:inline-block; width:8px; height:8px; border-radius:50%;
+    background:var(--green); margin-right:5px; }
+  .health.bad .dot { background:var(--red); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⚖️ Laya Decisions</h1>
+  <div class="sub">Typed decisions from the Laya model — choice · score · noul</div>
+
+  <div class="tabs">
+    <div class="tab on" data-mode="decide">Decide</div>
+    <div class="tab" data-mode="election">Election</div>
+    <div class="tab" data-mode="options">Options</div>
+  </div>
+
+  <!-- generic -->
+  <div class="card" id="pane-decide">
+    <label>Context</label>
+    <textarea id="g-state" placeholder="The facts the model should decide on…"></textarea>
+    <div id="qlist"></div>
+    <button class="ghost" id="addq">+ Add question</button>
+    <button class="run" id="go-decide">Decide</button>
+  </div>
+
+  <!-- election preset -->
+  <div class="card" id="pane-election" style="display:none">
+    <label>Race context</label>
+    <textarea id="e-context" placeholder="Maine Senate: poll aggregate D+2, markets 54% Dem. Incumbent retiring."></textarea>
+    <button class="run" id="go-election">Call the race</button>
+  </div>
+
+  <!-- options preset -->
+  <div class="card" id="pane-options" style="display:none">
+    <label>Flow description</label>
+    <textarea id="o-state" placeholder="NVDA 2026-10-16 $200 call. Underlying $192.40, 4% OTM. Volume 12,400 vs OI 1,800 (6.9x). IV 48%. 28 days to expiry."></textarea>
+    <button class="run" id="go-options">Filter the flow</button>
+  </div>
+
+  <div class="card" id="out" style="display:none"></div>
+  <div class="health" id="health"><span class="dot"></span>checking server…</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = 'decide', qn = 0;
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
+  t.classList.add('on'); mode = t.dataset.mode;
+  ['decide','election','options'].forEach(m => $('pane-'+m).style.display = m===mode ? '' : 'none');
+  $('out').style.display = 'none';
+}));
+
+/* ---------- question builder ---------- */
+function addQuestion() {
+  qn++;
+  const d = document.createElement('div');
+  d.className = 'q'; d.dataset.q = qn;
+  d.innerHTML = `
+    <button class="del" title="remove">×</button>
+    <label>Question id</label><input type="text" class="qid" value="q${qn}">
+    <label>Type</label>
+    <select class="qtype">
+      <option value="choice">choice — pick one option</option>
+      <option value="score">score — rate 0–100</option>
+      <option value="noul">noul — confidence 0–1</option>
+    </select>
+    <label>Instructions</label><input type="text" class="qinst" placeholder="What should the model judge?">
+    <label>Criteria</label><textarea class="qcrit" style="min-height:56px" placeholder="choice → one &quot;key: description&quot; per line&#10;score → comma-separated levels"></textarea>
+    <div class="hint">choice: <i>key: description</i> per line · score: <i>low, medium, high</i> · noul: leave blank</div>`;
+  d.querySelector('.del').onclick = () => d.remove();
+  $('qlist').appendChild(d);
+}
+$('addq').onclick = addQuestion;
+addQuestion();
+
+function parseCriteria(type, text) {
+  text = text.trim();
+  if (type === 'noul' || !text) return type === 'score' ? [] : {};
+  if (type === 'score') return text.split(',').map(s => s.trim()).filter(Boolean);
+  const obj = {};
+  text.split('\n').forEach(line => {
+    const i = line.indexOf(':');
+    if (i > 0) obj[line.slice(0,i).trim()] = line.slice(i+1).trim();
+  });
+  return obj;
+}
+
+/* ---------- api ---------- */
+async function callApi(path, payload, btn) {
+  const out = $('out');
+  btn.disabled = true;
+  out.style.display = '';
+  out.innerHTML = '<div class="spin">Thinking…</div>';
+  try {
+    const r = await fetch(path, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || ('HTTP ' + r.status));
+    render(data);
+  } catch (e) {
+    out.innerHTML = '<div class="err">Error: ' + escapeHtml(e.message) + '</div>';
+  }
+  btn.disabled = false;
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function render(data) {
+  const out = $('out');
+  let h = '';
+  for (const [k, a] of Object.entries(data.answers || {})) {
+    h += '<div class="ans"><div class="k">' + escapeHtml(k) + '</div>';
+    if (a.choice !== undefined) {
+      h += '<div class="v">' + escapeHtml(a.choice) + '</div>';
+    } else if (a.score_0_100 !== undefined) {
+      const v = Math.max(0, Math.min(100, a.score_0_100));
+      h += '<div class="v">' + v.toFixed(1) + ' / 100</div>' +
+           '<div class="bar"><div style="width:' + v + '%"></div></div>';
+    } else if (a.noul !== undefined && a.noul !== null) {
+      const v = Math.max(0, Math.min(1, a.noul));
+      h += '<div class="v">' + (v*100).toFixed(0) + '% confident</div>' +
+           '<div class="bar"><div style="width:' + (v*100) + '%"></div></div>';
+    } else {
+      h += '<div class="v">' + escapeHtml(JSON.stringify(a)) + '</div>';
+    }
+    h += '</div>';
+  }
+  h += '<div class="meta">⏱ ' + escapeHtml(data.latency_ms) + ' ms</div>';
+  h += '<details class="raw"><summary>raw JSON</summary><pre>' +
+       escapeHtml(JSON.stringify(data, null, 1)) + '</pre></details>';
+  out.innerHTML = h;
+}
+
+$('go-decide').onclick = e => {
+  const questions = {};
+  let ok = true;
+  document.querySelectorAll('#qlist .q').forEach(d => {
+    const id = d.querySelector('.qid').value.trim();
+    const type = d.querySelector('.qtype').value;
+    const instructions = d.querySelector('.qinst').value.trim();
+    const criteria = parseCriteria(type, d.querySelector('.qcrit').value);
+    if (!id || !instructions) ok = false;
+    questions[id] = {type, instructions, criteria};
+  });
+  if (!ok || !Object.keys(questions).length)
+    return ($('out').style.display = '',
+            $('out').innerHTML = '<div class="err">Give each question an id and instructions.</div>');
+  callApi('/decide',
+    {state: {context: $('g-state').value.trim()}, questions}, e.target);
+};
+
+$('go-election').onclick = e =>
+  callApi('/decide/election', {context: $('e-context').value.trim()}, e.target);
+
+$('go-options').onclick = e =>
+  callApi('/decide/options', {state: $('o-state').value.trim()}, e.target);
+
+/* ---------- health ---------- */
+fetch('/health').then(r => r.json()).then(h => {
+  const el = $('health');
+  if (h.ok) el.innerHTML = '<span class="dot"></span>' + escapeHtml(h.model || 'model loaded');
+  else { el.classList.add('bad'); el.innerHTML = '<span class="dot"></span>model not loaded'; }
+}).catch(() => {
+  const el = $('health');
+  el.classList.add('bad'); el.innerHTML = '<span class="dot"></span>server unreachable';
+});
+</script>
+</body>
+</html>
